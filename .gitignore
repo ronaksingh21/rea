@@ -3,3 +3,15 @@ __pycache__/
 .venv/
 data/
 .env
+
+# OpenClaw workspace/system files (not part of project repo)
+.openclaw/
+AGENTS.md
+SOUL.md
+TOOLS.md
+HEARTBEAT.md
+BOOTSTRAP.md
+IDENTITY.md
+USER.md
+MEMORY.md
+memory/
