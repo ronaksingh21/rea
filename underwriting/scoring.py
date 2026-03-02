@@ -76,6 +76,14 @@ def run_underwriting(deal: ExtractedDeal) -> UnderwritingResult:
         score += w.missing_core_fields
         warnings.append("Missing purchase_price or NOI")
 
+    if not deal.rent_roll:
+        score += w.missing_rent_roll
+        warnings.append("Rent roll not extracted")
+
+    if not deal.lease_expiration_dates:
+        score += w.missing_lease_expiries
+        warnings.append("Lease expiration dates missing")
+
     if score >= 60:
         label = "High"
     elif score >= 30:

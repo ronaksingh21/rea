@@ -8,7 +8,9 @@ class RiskWeights:
     concentration_high: int = 35
     concentration_med: int = 20
     caprate_mismatch: int = 20
-    missing_core_fields: int = 10
+    missing_core_fields: int = 25
+    missing_rent_roll: int = 10
+    missing_lease_expiries: int = 10
 
 
 @dataclass
