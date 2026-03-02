@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from agent.models import ExtractedDeal, UnderwritingResult
+from underwriting.config import DEFAULT_THRESHOLDS, DEFAULT_WEIGHTS
 
 
 def _months_until(date_str: str) -> float | None:
@@ -47,30 +48,32 @@ def run_underwriting(deal: ExtractedDeal) -> UnderwritingResult:
     avg_rent_psf = sum(rent_psf) / len(rent_psf) if rent_psf else None
 
     score = 0
+    t = DEFAULT_THRESHOLDS
+    w = DEFAULT_WEIGHTS
+
     if expiring_24 is not None:
-        if expiring_24 > 40:
-            score += 35
-        elif expiring_24 > 25:
-            score += 20
+        if expiring_24 > t.expiry_high_pct:
+            score += w.lease_expiry_high
+        elif expiring_24 > t.expiry_med_pct:
+            score += w.lease_expiry_med
 
     if concentration is not None:
-        if concentration > 35:
-            score += 35
-        elif concentration > 20:
-            score += 20
+        if concentration > t.concentration_high_pct:
+            score += w.concentration_high
+        elif concentration > t.concentration_med_pct:
+            score += w.concentration_med
 
     if calculated_cap_rate is not None and deal.reported_cap_rate is not None:
-        # reported cap rate expected in decimal or percent; normalize rough cases
         reported = deal.reported_cap_rate
         if reported > 1.0:
             reported = reported / 100.0
         diff_pct = abs(calculated_cap_rate - reported) / (reported or 1)
-        if diff_pct > 0.03:
-            score += 20
+        if diff_pct > t.caprate_diff_max:
+            score += w.caprate_mismatch
             warnings.append("Calculated cap rate differs from reported by >3%")
 
     if deal.purchase_price is None or deal.noi is None:
-        score += 10
+        score += w.missing_core_fields
         warnings.append("Missing purchase_price or NOI")
 
     if score >= 60:

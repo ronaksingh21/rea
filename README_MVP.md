@@ -29,6 +29,28 @@ Then run:
 python -m agent.main
 ```
 
+## Credential Wiring
+
+```bash
+bash scripts/setup_env.sh
+```
+
+- Put Gmail OAuth Desktop credentials JSON locally.
+- Set `GMAIL_CREDENTIALS_PATH` in `.env` to that file.
+- Set `GEMINI_API_KEY` (or set `LLM_PROVIDER=regex` for fallback extraction).
+- Set Slack token/channel.
+
+## Batch-test first 5 sample OMs
+
+Place 5 OM PDFs in `tests/om_samples/` then run:
+
+```bash
+python scripts/process_sample_pdfs.py
+python scripts/tune_report.py
+```
+
+Output file: `data/sample_run_results.json`
+
 ## Data Output
 - PDFs: `data/pdfs/`
 - SQLite DB: `data/deals.db`
