@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
+
     ocr_enabled: bool = True
 
     slack_bot_token: str = ""

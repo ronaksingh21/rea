@@ -4,6 +4,7 @@ import json
 import re
 from textwrap import dedent
 import google.generativeai as genai
+from openai import OpenAI
 
 from agent.config import settings
 from agent.models import ExtractedDeal
@@ -39,9 +40,6 @@ PROMPT_TEMPLATE = dedent(
     - Output STRICT JSON only.
     - If field is missing, return null (or empty list for arrays).
     - No markdown. No explanation.
-
-    OM text:
-    {text}
     """
 )
 
@@ -56,9 +54,21 @@ def _strip_fences(s: str) -> str:
 
 def _first_money(text: str, label_patterns: list[str]) -> float | None:
     for lp in label_patterns:
-        m = re.search(lp + r"[^\n\r$]{0,50}\$\s*([\d,]+(?:\.\d+)?)", text, flags=re.I)
+        m = re.search(lp + r"[^\n\r$]{0,80}\$\s*([\d,]+(?:\.\d+)?)", text, flags=re.I)
         if m:
             return float(m.group(1).replace(",", ""))
+    return None
+
+
+def _fallback_price_anywhere(text: str) -> float | None:
+    pats = [
+        r"(?:offering|asking|list|purchase)\s*price[^\n\r$]{0,80}\$\s*([\d,]+(?:\.\d+)?)",
+        r"price[^\n\r$]{0,40}\$\s*([\d,]+(?:\.\d+)?)",
+    ]
+    for p in pats:
+        m = re.search(p, text, flags=re.I)
+        if m:
+            return float(m.group(1).replace(',', ''))
     return None
 
 
@@ -71,7 +81,9 @@ def _first_percent(text: str, label_patterns: list[str]) -> float | None:
 
 
 def regex_extract_fallback(raw_text: str) -> ExtractedDeal:
-    purchase_price = _first_money(raw_text, [r"purchase\s*price", r"list\s*price", r"asking\s*price"])
+    purchase_price = _first_money(raw_text, [r"purchase\s*price", r"list\s*price", r"asking\s*price", r"offering\s*price"])
+    if purchase_price is None:
+        purchase_price = _fallback_price_anywhere(raw_text)
     noi = _first_money(raw_text, [r"\bnoi\b", r"net\s*operating\s*income"])
     reported_cap_rate = _first_percent(raw_text, [r"cap\s*rate", r"going\s*in\s*cap"])
 
@@ -88,24 +100,49 @@ def regex_extract_fallback(raw_text: str) -> ExtractedDeal:
     )
 
 
-def extract_structured_data(raw_text: str) -> ExtractedDeal:
-    if settings.llm_provider == "regex":
+def _extract_with_openai(raw_text: str) -> ExtractedDeal:
+    if not settings.openai_api_key:
         return regex_extract_fallback(raw_text)
 
-    if settings.llm_provider != "gemini":
-        raise NotImplementedError("Implemented providers: gemini, regex")
+    client = OpenAI(api_key=settings.openai_api_key)
+    prompt = f"{PROMPT_TEMPLATE}\n\nOM text:\n{raw_text[:200000]}"
 
+    resp = client.chat.completions.create(
+        model=settings.openai_model,
+        response_format={"type": "json_object"},
+        temperature=0,
+        messages=[
+            {"role": "system", "content": "You extract CRE OM fields into strict JSON."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    payload = json.loads(_strip_fences(text))
+    return ExtractedDeal.model_validate(payload)
+
+
+def _extract_with_gemini(raw_text: str) -> ExtractedDeal:
     if not settings.gemini_api_key:
         return regex_extract_fallback(raw_text)
 
     genai.configure(api_key=settings.gemini_api_key)
     model = genai.GenerativeModel(settings.gemini_model)
+    prompt = f"{PROMPT_TEMPLATE}\n\nOM text:\n{raw_text[:200000]}"
 
-    prompt = PROMPT_TEMPLATE.replace("{text}", raw_text[:200000])
+    resp = model.generate_content(prompt)
+    text = _strip_fences((resp.text or "").strip())
+    payload = json.loads(text)
+    return ExtractedDeal.model_validate(payload)
+
+
+def extract_structured_data(raw_text: str) -> ExtractedDeal:
     try:
-        resp = model.generate_content(prompt)
-        text = _strip_fences((resp.text or "").strip())
-        payload = json.loads(text)
-        return ExtractedDeal.model_validate(payload)
+        if settings.llm_provider == "regex":
+            return regex_extract_fallback(raw_text)
+        if settings.llm_provider == "openai":
+            return _extract_with_openai(raw_text)
+        if settings.llm_provider == "gemini":
+            return _extract_with_gemini(raw_text)
+        return regex_extract_fallback(raw_text)
     except Exception:
         return regex_extract_fallback(raw_text)
