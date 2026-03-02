@@ -15,3 +15,8 @@ IDENTITY.md
 USER.md
 MEMORY.md
 memory/
+
+# Local secrets/artifacts
+credentials.json
+.DS_Store
+tests/om_samples/*.pdf

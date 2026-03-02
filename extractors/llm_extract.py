@@ -101,11 +101,10 @@ def extract_structured_data(raw_text: str) -> ExtractedDeal:
     genai.configure(api_key=settings.gemini_api_key)
     model = genai.GenerativeModel(settings.gemini_model)
 
-    prompt = PROMPT_TEMPLATE.format(text=raw_text[:200000])
-    resp = model.generate_content(prompt)
-    text = _strip_fences((resp.text or "").strip())
-
+    prompt = PROMPT_TEMPLATE.replace("{text}", raw_text[:200000])
     try:
+        resp = model.generate_content(prompt)
+        text = _strip_fences((resp.text or "").strip())
         payload = json.loads(text)
         return ExtractedDeal.model_validate(payload)
     except Exception:
